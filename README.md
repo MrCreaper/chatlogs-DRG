@@ -1,6 +1,28 @@
-# Chat log
+# [Chat log](https://mod.io/g/drg/m/chat-log/)
 
 Logs your chat what else did you excpect.
+
+## Usage / Help
+
+```txt
+Usage: chatlog [options]
+
+Do stuff with collected DRG chat logs.
+
+Options:
+  -V, --version         output the version number
+  -d, --debug           enable debug
+  -s, --simple          write out a simple txt of the chat
+  -j, --json            write the csv as json
+  --csv <path>          path to the chatlogs.csv
+  -g, --dontIgnoreGame  dont ignore game messages
+  -w, --watch           watch for changes in the csv and rerun
+  -t, --table           write some nice tables, files suffixed with "T"
+  -c, --cleanTable      REQUIRES -t | writes clean tables without borders
+  -h, --help            output usage information
+```
+
+Output is in `./out/`
 
 ## Dev
 
