@@ -1,5 +1,6 @@
 const fs = require(`fs-extra`);
 const os = require(`os`);
+const path = require(`path`);
 const csv = require('csv-parser');
 const iconv = require('iconv-lite');
 const { table, getBorderCharacters } = require(`table`);
@@ -35,8 +36,11 @@ program
     .option(`--csv <path>`, 'path to the chatlogs.csv')
     .option('-g, --dontIgnoreGame', 'dont ignore game messages')
     .option('-w, --watch', 'watch for changes in the csv and rerun')
+    .option('-m, --mod', 'Communicates with the mod')
     .option('-t, --table', 'write some nice tables, files suffixed with "T"')
     .option('-c, --cleanTable', 'REQUIRES -t | writes clean tables without borders')
+    .option(`--blacklist <list>`, 'List ignored people, like yourself. Seperate names by ","')
+    .option(`--whitelist <list>`, 'List included people, like yourself. Seperate names by ","')
 
 program.parse(process.argv);
 const options = program.opts();
@@ -82,6 +86,37 @@ if (!paths.csv)
             break;
     }
 
+if (options.mod) {
+    options.cleanTable = true;
+    let cmdIN = `${path.dirname(paths.csv)}/chatlogcmd.txt`;
+    if (!fs.existsSync(cmdIN)) fs.writeFileSync(cmdIN, ``);
+    let cmdOUT = `${path.dirname(paths.csv)}/chatlogcmdout.txt`;
+    fs.watchFile(cmdIN, async (curr, prev) => {
+        let cmd = fs.readFileSync(cmdIN).toString();
+        if (!cmd) return;
+        fs.writeFileSync(cmdIN, ``);
+        if (options.debug)
+            console.log(cmd);
+        switch (cmd.split(` `)[0]) {
+            default:
+            case `help`:
+                fs.writeFileSync(cmdOUT, [
+                    `general - `,
+                    `topchat - top chatters`
+                ].join(`\n`));
+                break;
+            case `general`:
+                fs.writeFileSync(cmdOUT, await run(true));
+                break;
+            case `topchat`:
+                run(true);
+                fs.writeFileSync(cmdOUT, fs.readFileSync(paths.topChattersT));
+                break;
+        }
+    });
+    console.log(`Mod mode enabled.`);
+}
+
 if (!fs.existsSync(paths.csv)) return console.log(`Couldnt find log\n${paths.csv}`);
 if (fs.statSync(paths.csv).size == 0) return console.log(`File is empty`);
 if (options.debug) console.log(paths.csv);
@@ -94,13 +129,16 @@ if (options.watch)
         run();
     });
 
-run();
-async function run() {
+if (!options.mod)
+    run();
+async function run(silent = false) {
 
     //// init stats
 
     const wordCount = {};
     const topChatters = {};
+    var chatCount = 0;
+    var chatGameCount = 0;
 
     function tokenize(text) {
         text = String(text).toLowerCase().replace(/[^\w\s]/g, '');
@@ -128,11 +166,14 @@ async function run() {
             .pipe(iconv.decodeStream('utf-16le'))
             .pipe(csv())
             .on('data', x => {
-                if (!x.name && !options.dontIgnoreGame) return; // ignore game messages
+                if (options.blacklist && options.blacklist.split(`,`).includes(x.name)) return;
+                if (options.whitelist && !options.whitelist.split(`,`).includes(x.name)) return;
+                chatCount++;
+                if (!x.name && !options.dontIgnoreGame) return chatGameCount++; // ignore game messages
                 x.index = parseInt(x.index);
                 x.added = new Date(x.added);
                 if (options.json || options.simple) logs.push(x); // simple for simple table
-                if (options.simple) fs.appendFileSync(paths.simple, `${x.name}: ${x.message}\n`)
+                if (options.simple) fs.appendFileSync(paths.simple, `${x.name}: ${x.message}\n`);
 
                 //// stats
 
@@ -151,52 +192,50 @@ async function run() {
     if (options.json)
         fs.writeFileSync(paths.json, JSON.stringify(logs))
 
-    logwordCount()
+    var sortableWC = [];
+    logwordCount();
     function logwordCount() {
-        let sortable = [];
         for (var x in wordCount) {
-            sortable.push([x, wordCount[x]]);
+            sortableWC.push([x, wordCount[x]]);
         }
 
-        sortable = sortable.sort(function (a, b) {
+        sortableWC = sortableWC.sort(function (a, b) {
             return a[1] - b[1];
         }).reverse().filter(x => x[0]);
 
         var total = 0;
-        sortable.forEach(x => total += x[1]);
+        sortableWC.forEach(x => total += x[1]);
 
         fs.removeSync(paths.wordCount);
-        sortable.forEach(x => {
+        sortableWC.forEach(x => {
             x[2] = `${(x[1] / total * 100).toPrecision(2)}%`;
             fs.appendFileSync(paths.wordCount, `${x[0]} : ${x[1]} (${x[2]})\n`)
         });
         if (options.table)
-            fs.writeFileSync(paths.wordCountT, table(sortable, tableConfig));
-        console.log(`Diffrent words: ${sortable.length}`);
+            fs.writeFileSync(paths.wordCountT, table(sortableWC, tableConfig));
     }
 
-    logTopChatters()
+    var sortableTC = [];
+    logTopChatters();
     function logTopChatters() {
-        let sortable = [];
         for (var x in topChatters) {
-            sortable.push([x, topChatters[x]]);
+            sortableTC.push([x, topChatters[x]]);
         }
 
-        sortable.sort(function (a, b) {
+        sortableTC.sort(function (a, b) {
             return a[1] - b[1];
         });
 
         var total = 0;
-        sortable.forEach(x => total += x[1]);
+        sortableTC.forEach(x => total += x[1]);
 
         fs.removeSync(paths.topChatters);
-        sortable.reverse().forEach(x => {
+        sortableTC.reverse().forEach(x => {
             x[2] = `${(x[1] / total * 100).toPrecision(2)}%`;
             fs.appendFileSync(paths.topChatters, `${x[0]} : ${x[1]} (${x[2]})\n`)
         });
         if (options.table)
-            fs.writeFileSync(paths.topChattersT, table(sortable, tableConfig));
-        console.log(`Diffrent chatters: ${sortable.length}`);
+            fs.writeFileSync(paths.topChattersT, table(sortableTC, tableConfig));
     }
 
     function objectToArray(input) {
@@ -219,6 +258,14 @@ async function run() {
     if (options.table)
         fs.writeFileSync(paths.table, table(objectToArray(logs), tableConfig));
 
-    if (logs.length)
-        console.log(`Message count: ${logs.length} (${logs[logs.length - 1].index})`);
+    let generalStatsTable = table([
+        [`Total Message count`, chatCount],
+        [`Game Message count`, chatGameCount],
+        [`Message count`, chatCount - chatGameCount],
+        [`Diffrent chatters`, sortableTC.length],
+        [`Diffrent words`, sortableWC.length],
+    ], tableConfig);
+    if (!silent)
+        console.log(generalStatsTable);
+    return generalStatsTable;
 };
