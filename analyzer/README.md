@@ -1,6 +1,6 @@
-# [Chat log](https://mod.io/g/drg/m/chat-log/)
+# Chat log analyzer
 
-Logs your chat what else did you excpect.
+Analyzes chat logs
 
 ## Usage / Help
 

@@ -91,6 +91,9 @@ if (options.mod) {
     let cmdIN = `${path.dirname(paths.csv)}/chatlogcmd.txt`;
     if (!fs.existsSync(cmdIN)) fs.writeFileSync(cmdIN, ``);
     let cmdOUT = `${path.dirname(paths.csv)}/chatlogcmdout.txt`;
+    function modOut(text) {
+        fs.writeFileSync(cmdOUT, String(text).replace(/(\r\n|\n|\r)/gm, `\\n`));
+    }
     fs.watchFile(cmdIN, async (curr, prev) => {
         let cmd = fs.readFileSync(cmdIN).toString();
         if (!cmd) return;
@@ -100,17 +103,23 @@ if (options.mod) {
         switch (cmd.split(` `)[0]) {
             default:
             case `help`:
-                fs.writeFileSync(cmdOUT, [
-                    `general - `,
-                    `topchat - top chatters`
+                modOut([
+                    `general - general stats`,
+                    `topchat - top chatters`,
+                    `opts <launch argumnets> - change launch arguments`,
                 ].join(`\n`));
                 break;
             case `general`:
-                fs.writeFileSync(cmdOUT, await run(true));
+                modOut(await run(true));
                 break;
             case `topchat`:
-                run(true);
-                fs.writeFileSync(cmdOUT, fs.readFileSync(paths.topChattersT));
+                await run(true);
+                modOut(fs.readFileSync(paths.topChattersT));
+                break;
+            case `opts`:
+                program.parse(cmd.replace(`${cmd.split(` `)[0]} `, ``));
+                options = program.opts();
+                modOut(`Options updated.`);
                 break;
         }
     });
@@ -166,12 +175,15 @@ async function run(silent = false) {
             .pipe(iconv.decodeStream('utf-16le'))
             .pipe(csv())
             .on('data', x => {
+                if (x.name == x.message) x.name = ``; // ?
                 if (options.blacklist && options.blacklist.split(`,`).includes(x.name)) return;
                 if (options.whitelist && !options.whitelist.split(`,`).includes(x.name)) return;
                 chatCount++;
                 if (!x.name && !options.dontIgnoreGame) return chatGameCount++; // ignore game messages
                 x.index = parseInt(x.index);
                 x.added = new Date(x.added);
+                x.name = String(x.name).replace(/[\u0000-\u001F\u007F-\u009F]/g, ""); // remove control characters (for table)
+                x.message = String(x.message).replace(/[\u0000-\u001F\u007F-\u009F]/g, ""); // remove control characters (for table)
                 if (options.json || options.simple) logs.push(x); // simple for simple table
                 if (options.simple) fs.appendFileSync(paths.simple, `${x.name}: ${x.message}\n`);
 
@@ -187,35 +199,47 @@ async function run(silent = false) {
             .on('end', r);
     });
 
-    if (options.simple) fs.writeFileSync(paths.simpleT, table(logs.map(x => [x.name, x.message]), tableConfig));
+    if (options.simple && options.table)
+        fs.writeFileSync(paths.simpleT,
+            table(
+                logs.map(x => [
+                    x.name,
+                    x.message
+                ])
+                , tableConfig)
+        );
 
     if (options.json)
-        fs.writeFileSync(paths.json, JSON.stringify(logs))
+        fs.writeFileSync(paths.json, JSON.stringify(logs, null, 4))
 
-    var sortableWC = [];
+    let sortableWC = [];
     logwordCount();
     function logwordCount() {
         for (var x in wordCount) {
             sortableWC.push([x, wordCount[x]]);
         }
 
-        sortableWC = sortableWC.sort(function (a, b) {
+        // Sort
+        sortableWC.sort(function (a, b) {
             return a[1] - b[1];
         }).reverse().filter(x => x[0]);
 
         var total = 0;
         sortableWC.forEach(x => total += x[1]);
 
+        // remove old file
         fs.removeSync(paths.wordCount);
+        // write new file
         sortableWC.forEach(x => {
             x[2] = `${(x[1] / total * 100).toPrecision(2)}%`;
             fs.appendFileSync(paths.wordCount, `${x[0]} : ${x[1]} (${x[2]})\n`)
         });
+        // rewrite table
         if (options.table)
             fs.writeFileSync(paths.wordCountT, table(sortableWC, tableConfig));
     }
 
-    var sortableTC = [];
+    let sortableTC = [];
     logTopChatters();
     function logTopChatters() {
         for (var x in topChatters) {
@@ -226,14 +250,18 @@ async function run(silent = false) {
             return a[1] - b[1];
         });
 
+        // get total
         var total = 0;
         sortableTC.forEach(x => total += x[1]);
 
+        // remove old file
         fs.removeSync(paths.topChatters);
+        // Write new output
         sortableTC.reverse().forEach(x => {
             x[2] = `${(x[1] / total * 100).toPrecision(2)}%`;
             fs.appendFileSync(paths.topChatters, `${x[0]} : ${x[1]} (${x[2]})\n`)
         });
+        // rewrite table
         if (options.table)
             fs.writeFileSync(paths.topChattersT, table(sortableTC, tableConfig));
     }
