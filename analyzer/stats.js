@@ -25,9 +25,10 @@ const { Command } = require('commander');
 const program = new Command();
 
 program
+    //.name(process.argv[0])
     .name(package.name)
     .description(package.description)
-    .version(package.version);
+    .version(`v${package.version}\n${os.type()} ${os.arch()} ${os.release()}\n${os.version()}`);
 
 program
     .option('-d, --debug', 'enable debug')
