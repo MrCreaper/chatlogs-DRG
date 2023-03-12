@@ -42,6 +42,7 @@ program
     .option('-c, --cleanTable', 'REQUIRES -t | writes clean tables without borders')
     .option(`--blacklist <list>`, 'List ignored people, like yourself. Seperate names by ","')
     .option(`--whitelist <list>`, 'List included people, like yourself. Seperate names by ","')
+    .option('--noNonAscii', 'replace non ascii characters from names with ?')
 
 program.parse(process.argv);
 const options = program.opts();
@@ -183,7 +184,10 @@ async function run(silent = false) {
                 if (!x.name && !options.dontIgnoreGame) return chatGameCount++; // ignore game messages
                 x.index = parseInt(x.index);
                 x.added = new Date(x.added);
-                x.name = String(x.name).replace(/[\u0000-\u001F\u007F-\u009F]/g, ""); // remove control characters (for table)
+                x.name = String(x.name)
+                    .replace(/[\u0000-\u001F\u007F-\u009F]/g, ""); // remove control characters (for table)
+                if (options.noNonAscii)
+                    x.name = x.name.replace(/[^\x00-\x7F]/g, `?`) // replace non ascii (for table spacing sake)
                 x.message = String(x.message).replace(/[\u0000-\u001F\u007F-\u009F]/g, ""); // remove control characters (for table)
                 if (options.json || options.simple) logs.push(x); // simple for simple table
                 if (options.simple) fs.appendFileSync(paths.simple, `${x.name}: ${x.message}\n`);
@@ -284,8 +288,11 @@ async function run(silent = false) {
         return out;
     }
 
-    if (options.table)
-        fs.writeFileSync(paths.table, table(objectToArray(logs), tableConfig));
+    if (!options.json)
+        return console.log(`Table also requires -j argument`);
+    else
+        if (options.table)
+            fs.writeFileSync(paths.table, table(objectToArray(logs), tableConfig));
 
     let generalStatsTable = table([
         [`Total Message count`, chatCount],

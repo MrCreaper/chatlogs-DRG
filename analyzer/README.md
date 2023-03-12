@@ -22,6 +22,7 @@ Options:
   -c, --cleanTable      REQUIRES -t | writes clean tables without borders
   --blacklist <list>    List ignored people, like yourself. Seperate names by ","
   --whitelist <list>    List included people, like yourself. Seperate names by ","
+  --noNonAscii          replace non ascii characters from names with ?
   -h, --help            output usage information
 ```
 
