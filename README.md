@@ -2,12 +2,11 @@
 
 Logs your chat what else did you excpect.
 
-The analyzer can be found in the releases as an executable.
+The analyzer can be found in the [releases](https://github.com/MrCreaper/chatlogs-DRG/releases/latest) as an executable.
 
 ## Commands
 
-In game you can use commands if the analyzer is running with the `-m` argumnet.
-So in game you could say `/help` and you would get a list of the available commands.
+In game you can use commands like `/help` if the [analyzer](./analyzer/README.md) is running with the `-m` argument.
 
 ## Dev
 
